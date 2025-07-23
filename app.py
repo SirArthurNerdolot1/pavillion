@@ -4,13 +4,14 @@ import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
 
-st.set_page_config(layout="wide")
-st.title("\U0001F4C8 BTC-USD Technical Backtest Dashboard")
+st.set_page_config(layout="wide", page_title="BTC Strategy Dashboard", page_icon="📈")
+st.title("📈 BTC-USD Technical Backtest Dashboard")
 
 # --- Sidebar Input ---
-st.sidebar.header("Choose Time Period")
+st.sidebar.header("📅 Time & Capital Settings")
 start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2018-01-01"))
 end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
+initial_capital = st.sidebar.number_input("💰 Initial Capital (USD)", min_value=1000, value=10000000, step=1000)
 
 # --- Load Data ---
 @st.cache_data
@@ -127,8 +128,8 @@ def sortino_ratio(series, N, rf):
     return mean / std_neg
 
 def backtest(df):
-    opening_capital = 10000000
-    capt = opening_capital
+    capt = initial_capital
+    opening_capital = initial_capital
     signals = list(df['Signal'])
     close = list(df['Close'])
     no_of_trades, long_trades, winning_trades = 0, 0, 0
@@ -198,14 +199,17 @@ def backtest(df):
     sr1 = sharpe_ratio(df['excess_returns'], len(df), 0.04)
     sr2 = sortino_ratio(df['excess_returns'], len(df), 0.04)
 
-    st.subheader("Backtest Summary")
-    st.markdown(f"- Benchmark Return: **{(close[-1] - close[0]) * 100 / close[0]:.2f}%**")
-    st.markdown(f"- Portfolio Return: **{(portfolio_value[-1] - portfolio_value[0]) * 100 / portfolio_value[0]:.2f}%**")
-    st.markdown(f"- Win Rate: **{winning_trades * 100 / no_of_trades:.2f}%**")
-    st.markdown(f"- Trades: {no_of_trades} (Long: {long_trades}, Short: {no_of_trades - long_trades})")
-    st.markdown(f"- Max Drawdown: **-{max_drawdown * 100:.2f}%**")
-    st.markdown(f"- Sharpe Ratio: **{sr1:.2f}**, Sortino Ratio: **{sr2:.2f}**")
-    st.markdown(f"- Avg Holding Time: **{np.mean(ht):.2f} days**, Max: **{max(ht)} days**")
+    st.subheader("📊 Backtest Summary")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Benchmark Return", f"{(close[-1] - close[0]) * 100 / close[0]:.2f}%")
+    col2.metric("Portfolio Return", f"{(portfolio_value[-1] - portfolio_value[0]) * 100 / portfolio_value[0]:.2f}%")
+    col3.metric("Sharpe Ratio", f"{sr1:.2f}")
+
+    st.markdown(f"**Win Rate:** {winning_trades * 100 / no_of_trades:.2f}%")
+    st.markdown(f"**Total Trades:** {no_of_trades} (Long: {long_trades}, Short: {no_of_trades - long_trades})")
+    st.markdown(f"**Max Drawdown:** -{max_drawdown * 100:.2f}%")
+    st.markdown(f"**Sortino Ratio:** {sr2:.2f}")
+    st.markdown(f"**Average Holding Time:** {np.mean(ht):.2f} days, **Max:** {max(ht)} days")
 
 # --- Indicator Pipeline ---
 df = ichimoku_cloud(df)
@@ -213,7 +217,6 @@ fib_levels = fibonacci_levels(df)
 df = generate_signals(df, fib_levels)
 df = macd(df)
 
-# Combine MACD + Ichimoku
 signals = list(df['Signal'])
 macd_signals = [0]
 signal_line = list(df['signal_line'])
@@ -224,12 +227,11 @@ for i in range(1, len(df)):
         macd_signals.append(1)
     else:
         macd_signals.append(0)
-final_signals = []
-for i in range(len(df)):
-    final_signals.append(signals[i] if signals[i] or macd_signals[i] else 0)
+final_signals = [signals[i] if signals[i] or macd_signals[i] else 0 for i in range(len(df))]
 df['Signal'] = final_signals
 df = clean_signals(df)
 df = atr(df)
+
 
 # --- Plotting ---
 def plot_ichimoku_fib(df, fib_levels):
@@ -254,7 +256,7 @@ backtest(df)
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=df['Date'], y=df['portfolio_value'], name='Portfolio Value', line=dict(color='blue')))
-fig.update_layout(title='Portfolio Value Over Time')
+fig.update_layout(title='📈 Portfolio Value Over Time')
 st.plotly_chart(fig, use_container_width=True)
 
 fig2 = go.Figure()
@@ -262,5 +264,5 @@ fig2.add_trace(go.Scatter(x=df['Date'], y=df['Close'], name='Close Price', line=
 fig2.add_trace(go.Scatter(x=df['Date'], y=df['atr'] * 10, name='ATR x10', line=dict(color='orange')))
 st.plotly_chart(fig2, use_container_width=True)
 
-with st.expander("Show Final Data"):
+with st.expander("📄 Show Final Data"):
     st.dataframe(df.tail(100), use_container_width=True)
